@@ -1355,7 +1355,8 @@ function showGlobalLoader(show) {
 }
 
 
-var currentScanMode = 'AUTO'; // AUTO, ENTRADA, SALIDA
+var currentScanMode = 'ENTRADA'; // ENTRADA o SALIDA
+var recentScans = {}; // { student_id: timestamp } — bloqueo por alumno
 
 function setScanMode(mode) {
   currentScanMode = mode;
@@ -1524,7 +1525,7 @@ function startScanner() {
     config,
     function(decodedText) {
       var now = Date.now();
-      if (now - lastScan < 2500) return;
+      if (now - lastScan < 1500) return;
       lastScan = now;
       processBarcode(decodedText);
     },
@@ -1536,7 +1537,7 @@ function startScanner() {
       config,
       function(decodedText) {
         var now = Date.now();
-        if (now - lastScan < 2500) return;
+        if (now - lastScan < 1500) return;
         lastScan = now;
         processBarcode(decodedText);
       },
@@ -1588,9 +1589,20 @@ async function processBarcode(rawCode){
     toast('Código no encontrado: ' + code, 'error');
     return;
   }
-  var recs=getTodayRecords(student.id);
-  var last=[...recs].sort(function(a,b){return b.timestamp-a.timestamp;})[0];
-  var type = currentScanMode === 'AUTO' ? ((!last||last.type==='SALIDA')?'ENTRADA':'SALIDA') : currentScanMode;
+
+  // Bloqueo de 5 minutos por alumno
+  var now5 = Date.now();
+  var lastStudentScan = recentScans[student.id] || 0;
+  var elapsed = (now5 - lastStudentScan) / 1000 / 60; // minutos
+  if (elapsed < 5) {
+    var resta = Math.ceil(5 - elapsed);
+    toast('⏳ ' + student.name + ' ya fue registrado. Espera ' + resta + ' min.', 'warning');
+    return;
+  }
+  recentScans[student.id] = now5;
+
+  // Tipo exacto según el modo seleccionado (sin AUTO)
+  var type = currentScanMode === 'SALIDA' ? 'SALIDA' : 'ENTRADA';
   var rec={id:Date.now().toString(),student_id:student.id,type:type,date:today(),time:nowTime(),timestamp:Date.now()};
   try{await recordAttendance(rec);}catch(e){toast('Error al registrar: '+e.message,'error');return;}
   var color=getColor(student.id);var group=getGroup(student.group_id);
