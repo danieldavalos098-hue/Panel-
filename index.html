@@ -1506,9 +1506,8 @@ function startScanner() {
   html5Scanner = new Html5Qrcode('html5qr-inner', { verbose: false });
 
   var config = {
-    fps: 15,
-    qrbox: { width: 280, height: 180 },
-    aspectRatio: 1.5,
+    fps: 10,
+    experimentalFeatures: { useBarCodeDetectorIfSupported: false },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.CODE_39,
@@ -1569,9 +1568,26 @@ function stopScanner() {
 
 
 function processCode(){var code=document.getElementById('manual-code').value.trim().toUpperCase();if(!code){toast('Ingresa un código','warning');return;}processBarcode(code);document.getElementById('manual-code').value='';}
-async function processBarcode(code){
-  var student=db.students.find(function(s){return s.id===code;});
-  if(!student){toast('Código no encontrado: '+code,'error');return;}
+async function processBarcode(rawCode){
+  // Limpiar el código leído: quitar espacios, saltos de línea, caracteres invisibles
+  var code = (rawCode || '').toString().trim().replace(/[\r\n\t]/g,'').toUpperCase();
+
+  // Buscar alumno: primero exacto, luego por coincidencia parcial
+  var student = db.students.find(function(s){ return s.id.toUpperCase() === code; });
+
+  // Si no encontró exacto, buscar si el código CONTIENE el ID o viceversa
+  if (!student) {
+    student = db.students.find(function(s){
+      var sid = s.id.toUpperCase();
+      return code.indexOf(sid) !== -1 || sid.indexOf(code) !== -1;
+    });
+  }
+
+  if (!student) {
+    console.warn('Código leído:', JSON.stringify(rawCode), '→ limpio:', code);
+    toast('Código no encontrado: ' + code, 'error');
+    return;
+  }
   var recs=getTodayRecords(student.id);
   var last=[...recs].sort(function(a,b){return b.timestamp-a.timestamp;})[0];
   var type = currentScanMode === 'AUTO' ? ((!last||last.type==='SALIDA')?'ENTRADA':'SALIDA') : currentScanMode;
@@ -1814,6 +1830,7 @@ function showBarcode(studentId) {
 }
 
 function generateBarcodeSVG(text) {
+  text = (text || '').toUpperCase().trim();
   // Code 128 B encoding
   var CODE128B_START = 104;
   var CODE128_STOP = 106;
