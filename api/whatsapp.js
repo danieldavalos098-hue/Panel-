@@ -4,7 +4,7 @@
 // ============================================================
 
 const WA_TOKEN   = process.env.WA_TOKEN   || "EAAJlZBajwjp4BQ8oC8OFEjmRZCnUrUzF2BaU5spx22ThJcimqqzvYyjKt9XJIZCAD54I5cKNj1ADHk8lqB1AtXVbwb4B7pmZATdYH4MZAnZAwvxWb3mTILrdlHabxwnPnvscd7BXxSi0haV4SStVR1Q7adzXoSr7P5ALKt0kzQpzgtAYsfop7UXC8Wit84oQZDZD";
-const WA_PHONE_ID = process.env.WA_PHONE_ID || "1092212570634676";
+const WA_PHONE_ID = process.env.WA_PHONE_ID || "1063289196858980";
 const WA_API_VER  = "v20.0";
 
 export default async function handler(req, res) {
