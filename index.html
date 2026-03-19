@@ -1012,9 +1012,14 @@ body.kiosk-mode #scanner-active {
             <div class="form-label">ID de Cuenta de Negocio</div>
             <input class="form-input" id="wsp-biz-id" placeholder="0987654321">
           </div>
-          <div style="display:flex;gap:10px;margin-top:8px">
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="saveWspConfig()">💾 Guardar Config</button>
             <button class="btn btn-secondary" onclick="testWsp()">🧪 Probar Conexión</button>
+          </div>
+          <div style="margin-top:16px;padding:14px;background:rgba(245,200,0,0.06);border:1px solid rgba(245,200,0,0.2);border-radius:12px">
+            <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:4px">📣 Notificaciones de Inasistencia</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Envía WhatsApp a todos los apoderados cuyos alumnos no registraron ENTRADA hoy.</div>
+            <button class="btn btn-primary" onclick="sendAbsentNotifications()" style="background:rgba(245,200,0,0.15);border:1px solid rgba(245,200,0,0.4);color:var(--accent)">⚠️ Enviar Notificaciones de Inasistencia</button>
           </div>
         </div>
         <div class="card">
@@ -1268,7 +1273,7 @@ var supabase = null;
 // ============================================================
 var db = {
   students: [], groups: [], attendance: [],
-  wspConfig: { token: "EAAJlZBajwjp4BQym6U3kbRu8l5ZCgPp16NSf28IlErmF6S133zC4AGnSRZAcpoDix46ZBMFtq3BUKpFprpeb5lz6j0PxAiNQHSKVvjIf8bhKH054KU9RxOgX0Eju2DtDAwNbgDu4PysAnnZBbDNgVjSaTxysT6KEn3YICBCXnMrQVZCBcZAfedsa6s3Rum6OaDadAZDZD", phoneId: "958684890672538", bizId: "904951565496729" },
+  wspConfig: { token: "EAAJlZBajwjp4BQym6U3kbRu8l5ZCgPp16NSf28IlErmF6S133zC4AGnSRZAcpoDix46ZBMFtq3BUKpFprpeb5lz6j0PxAiNQHSKVvjIf8bhKH054KU9RxOgX0Eju2DtDAwNbgDu4PysAnnZBbDNgVjSaTxysT6KEn3YICBCXnMrQVZCBcZAfedsa6s3Rum6OaDadAZDZD", phoneId: "1092212570634676", bizId: "904951565496729" },
   msgTemplates: {
     entry: 'Hola! *{{nombre}}* ingreso a la Academia San Marcos a las *{{hora}}*. Fecha: {{fecha}}. Ante cualquier consulta contactenos.',
     exit: 'Hola! *{{nombre}}* salio de la Academia San Marcos a las *{{hora}}*. Fecha: {{fecha}}. Ante cualquier consulta contactenos.',
@@ -1374,6 +1379,10 @@ function setScanMode(mode) {
 
 async function initApp() {
   await loadDB();
+  // Garantizar credenciales WA correctas si no hay nada guardado
+  if (!db.wspConfig.token)   db.wspConfig.token   = WA_TOKEN;
+  if (!db.wspConfig.phoneId) db.wspConfig.phoneId = WA_PHONE_ID;
+  if (!db.wspConfig.bizId)   db.wspConfig.bizId   = WA_BIZ_ID;
   if (db.groups.length === 0 && !supabase) {
     db.groups = [{id:'GRP-001',name:'Grupo A',shift:'Mañana',teacher:'Prof. García'},{id:'GRP-002',name:'Grupo B',shift:'Tarde',teacher:'Prof. Mendoza'}];
     db.students = [
@@ -1403,6 +1412,7 @@ function showPage(name) {
   if(name==='activity')renderActivity();
   if(name==='scanner')renderTodayRecords();
   if(scannerRunning&&name!=='scanner')stopScanner();
+  if(name==='whatsapp')renderWspPage();
 }
 
 // ============================================================
@@ -1684,30 +1694,141 @@ function renderTodayRecords(){
   tbody.innerHTML=recs.length?recs.map(function(a){var s=getStudent(a.student_id);if(!s)return'';var color=getColor(s.id);return'<tr><td><div class="student-cell"><div class="avatar" style="background:'+color+'22;color:'+color+'">'+getInitials(s.name,s.lastname)+'</div><span>'+s.name+' '+s.lastname+'</span></div></td><td>'+(a.type==='ENTRADA'?'<span class="status status-present">ENTRADA</span>':'<span class="status status-late">SALIDA</span>')+'</td><td style="color:var(--muted)">'+a.time+'</td></tr>';}).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px">Sin registros hoy</td></tr>';
 }
 
-// ============================================================
-// WHATSAPP
-// ============================================================
-async function sendWhatsApp(student,type,time){
-  var config=db.wspConfig;
-  var token=config.token||"EAAJlZBajwjp4BQym6U3kbRu8l5ZCgPp16NSf28IlErmF6S133zC4AGnSRZAcpoDix46ZBMFtq3BUKpFprpeb5lz6j0PxAiNQHSKVvjIf8bhKH054KU9RxOgX0Eju2DtDAwNbgDu4PysAnnZBbDNgVjSaTxysT6KEn3YICBCXnMrQVZCBcZAfedsa6s3Rum6OaDadAZDZD";
-  var phoneId=config.phoneId||"958684890672538";
-  if(!token||!phoneId)return;
-  var template=type==='ENTRADA'?db.msgTemplates.entry:db.msgTemplates.exit;
-  var group=getGroup(student.group_id);
-  var msg=template.replace(/{{nombre}}/g,student.name+" "+student.lastname).replace(/{{hora}}/g,time).replace(/{{fecha}}/g,formatDate(today())).replace(/{{grupo}}/g,group?group.name:"");
-  if(!student.phone)return;
-  var phone=student.phone.replace(/\D/g,"");
-  fetch("https://graph.facebook.com/v22.0/"+phoneId+"/messages",{
-    method:"POST",
-    headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
-    body:JSON.stringify({messaging_product:"whatsapp",to:phone,type:"text",text:{body:msg}})
-  }).then(function(r){return r.json();}).then(function(data){
-    if(data.messages&&data.messages.length>0)toast("📱 WhatsApp enviado");
-    else toast("WhatsApp: "+(data.error?data.error.message:"Error"),"warning");
-  }).catch(function(){toast("Error red WhatsApp","error");});
+
+// Rellena los inputs del formulario WhatsApp con valores actuales
+function renderWspPage() {
+  var t = document.getElementById('wsp-token');
+  var p = document.getElementById('wsp-phone-id');
+  var b = document.getElementById('wsp-biz-id');
+  if(t) t.value = db.wspConfig.token   || WA_TOKEN;
+  if(p) p.value = db.wspConfig.phoneId || WA_PHONE_ID;
+  if(b) b.value = db.wspConfig.bizId   || WA_BIZ_ID;
+  // Sincronizar plantillas
+  var et = document.getElementById('msg-entry-text');
+  var xt = document.getElementById('msg-exit-text');
+  var at = document.getElementById('msg-absent-text');
+  if(et && db.msgTemplates.entry)  et.value = db.msgTemplates.entry;
+  if(xt && db.msgTemplates.exit)   xt.value = db.msgTemplates.exit;
+  if(at && db.msgTemplates.absent) at.value = db.msgTemplates.absent;
 }
-function saveWspConfig(){db.wspConfig.token=document.getElementById('wsp-token').value;db.wspConfig.phoneId=document.getElementById('wsp-phone-id').value;db.wspConfig.bizId=document.getElementById('wsp-biz-id').value;saveConfigDB();toast('Configuración guardada');}
-async function testWsp(){var c=db.wspConfig;if(!c.token||!c.phoneId){toast('Completa la configuración primero','warning');return;}try{var res=await fetch('https://graph.facebook.com/v18.0/'+c.phoneId+'?access_token='+c.token);var data=await res.json();if(data.id)toast('✅ Conectado: '+(data.display_phone_number||data.id));else toast('Error: '+(data.error&&data.error.message?data.error.message:'No conectado'),'error');}catch(e){toast('Error de red','error');}}
+
+// ============================================================
+// WHATSAPP — Meta Business API v20.0
+// Phone ID : 1092212570634676
+// Business : 904951565496729
+// ============================================================
+var WA_TOKEN   = "EAAJlZBajwjp4BQym6U3kbRu8l5ZCgPp16NSf28IlErmF6S133zC4AGnSRZAcpoDix46ZBMFtq3BUKpFprpeb5lz6j0PxAiNQHSKVvjIf8bhKH054KU9RxOgX0Eju2DtDAwNbgDu4PysAnnZBbDNgVjSaTxysT6KEn3YICBCXnMrQVZCBcZAfedsa6s3Rum6OaDadAZDZD";
+var WA_PHONE_ID = "1092212570634676";
+var WA_BIZ_ID   = "904951565496729";
+var WA_API_VER  = "v20.0";
+
+function getWaToken()   { return db.wspConfig.token   || WA_TOKEN;    }
+function getWaPhoneId() { return db.wspConfig.phoneId || WA_PHONE_ID; }
+
+function buildWaMsg(type, student, time) {
+  var group    = getGroup(student.group_id);
+  var nombre   = student.name + " " + student.lastname;
+  var fecha    = formatDate(today());
+  var grupo    = group ? group.name : "";
+  var template = type === 'ENTRADA'  ? db.msgTemplates.entry
+               : type === 'SALIDA'   ? db.msgTemplates.exit
+               : db.msgTemplates.absent;
+  return template
+    .replace(/{{nombre}}/g, nombre)
+    .replace(/{{hora}}/g,   time)
+    .replace(/{{fecha}}/g,  fecha)
+    .replace(/{{grupo}}/g,  grupo);
+}
+
+async function sendWhatsApp(student, type, time) {
+  var token   = getWaToken();
+  var phoneId = getWaPhoneId();
+  if (!token || !phoneId) { console.warn("WA: sin config"); return; }
+  if (!student.phone)     { console.warn("WA: alumno sin teléfono", student.name); return; }
+
+  var phone = student.phone.replace(/\D/g, "");
+  // Formato internacional: números peruanos de 9 dígitos → agregar 51
+  if (phone.length === 9 && phone.startsWith("9")) phone = "51" + phone;
+
+  var msg = buildWaMsg(type, student, time);
+
+  try {
+    // Llamar al proxy serverless /api/whatsapp (evita el bloqueo CORS de Meta)
+    var res  = await fetch("/api/whatsapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to:      phone,
+        message: msg,
+        phoneId: phoneId,
+        token:   token
+      })
+    });
+    var data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      toast("📱 WhatsApp enviado a " + student.name);
+    } else {
+      var errMsg = data.error ? data.error.message : "Respuesta inesperada";
+      console.error("WA error:", data);
+      toast("⚠️ WhatsApp: " + errMsg, "warning");
+    }
+  } catch(e) {
+    console.error("WA fetch error:", e);
+    toast("❌ Error al enviar WhatsApp", "error");
+  }
+}
+
+// Enviar notificación de INASISTENCIA a todos los alumnos sin ENTRADA hoy
+async function sendAbsentNotifications() {
+  var hoy     = today();
+  var hora    = nowTime();
+  var entraron = db.attendance
+    .filter(function(a){ return a.date === hoy && a.type === 'ENTRADA'; })
+    .map(function(a){ return a.student_id; });
+  var ausentes = db.students.filter(function(s){ return !entraron.includes(s.id) && s.phone; });
+  if (ausentes.length === 0) { toast("Sin ausentes con teléfono registrado", "warning"); return; }
+  toast("Enviando " + ausentes.length + " notificaciones de inasistencia…");
+  for (var i = 0; i < ausentes.length; i++) {
+    await sendWhatsApp(ausentes[i], 'INASISTENCIA', hora);
+    await new Promise(function(r){ setTimeout(r, 400); }); // pausa entre envíos
+  }
+  toast("✅ Notificaciones de inasistencia enviadas");
+}
+
+function saveWspConfig() {
+  db.wspConfig.token   = document.getElementById('wsp-token').value.trim();
+  db.wspConfig.phoneId = document.getElementById('wsp-phone-id').value.trim();
+  db.wspConfig.bizId   = document.getElementById('wsp-biz-id').value.trim();
+  saveConfigDB();
+  toast('✅ Configuración guardada');
+}
+
+async function testWsp() {
+  var token   = getWaToken();
+  var phoneId = getWaPhoneId();
+  if (!token || !phoneId) { toast('Completa la configuración primero', 'warning'); return; }
+  var btn = document.querySelector('[onclick="testWsp()"]');
+  if (btn) { btn.textContent = '⏳ Probando…'; btn.disabled = true; }
+  try {
+    // Usar proxy serverless para evitar CORS
+    var res  = await fetch(
+      "/api/whatsapp?action=test&phoneId=" + phoneId + "&token=" + encodeURIComponent(token)
+    );
+    var data = await res.json();
+    if (data.id || data.display_phone_number) {
+      var num  = data.display_phone_number || phoneId;
+      var name = data.verified_name || "—";
+      toast("✅ Conectado · " + num + " · " + name);
+    } else {
+      var msg = data.error ? data.error.message : "No conectado";
+      toast("❌ " + msg, "error");
+    }
+  } catch(e) {
+    toast("Error de red al probar conexión", "error");
+  } finally {
+    if (btn) { btn.textContent = '🧪 Probar Conexión'; btn.disabled = false; }
+  }
+}
 function saveMsgTemplates(){db.msgTemplates.entry=document.getElementById('msg-entry-text').value;db.msgTemplates.exit=document.getElementById('msg-exit-text').value;db.msgTemplates.absent=document.getElementById('msg-absent-text').value;saveConfigDB();toast('Plantillas guardadas');}
 function switchMsgTab(tab,el){document.querySelectorAll('.msg-tab').forEach(function(t){t.style.display='none';});document.getElementById('msg-'+tab).style.display='block';document.querySelectorAll('.tabs .tab').forEach(function(t){t.classList.remove('active');});el.classList.add('active');}
 
@@ -2364,7 +2485,7 @@ document.querySelectorAll('.nav-item').forEach(function(item) {
 
 window.addEventListener('load', function() {
   if(!localStorage.getItem('wa_token')) localStorage.setItem('wa_token','EAAJlZBajwjp4BQym6U3kbRu8l5ZCgPp16NSf28IlErmF6S133zC4AGnSRZAcpoDix46ZBMFtq3BUKpFprpeb5lz6j0PxAiNQHSKVvjIf8bhKH054KU9RxOgX0Eju2DtDAwNbgDu4PysAnnZBbDNgVjSaTxysT6KEn3YICBCXnMrQVZCBcZAfedsa6s3Rum6OaDadAZDZD');
-  if(!localStorage.getItem('wa_phone_id')) localStorage.setItem('wa_phone_id','958684890672538');
+  if(!localStorage.getItem('wa_phone_id')) localStorage.setItem('wa_phone_id','1092212570634676');
   if(!localStorage.getItem('wa_biz_id')) localStorage.setItem('wa_biz_id','904951565496729');
 
   var u = localStorage.getItem('sb_url');
