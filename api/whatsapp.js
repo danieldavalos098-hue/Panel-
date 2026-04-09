@@ -3,8 +3,8 @@
 // Ruta: /api/whatsapp
 // ============================================================
 
-const ULTRA_INSTANCE = process.env.ULTRA_INSTANCE || "instance166408";
-const ULTRA_TOKEN    = process.env.ULTRA_TOKEN    || "6ml3yb542porbaon";
+const ULTRA_INSTANCE = process.env.ULTRA_INSTANCE || "instance169261";
+const ULTRA_TOKEN    = process.env.ULTRA_TOKEN    || "8mz6wfn13yfet2j3";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
