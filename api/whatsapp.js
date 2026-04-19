@@ -17,14 +17,15 @@ export default async function handler(req, res) {
   // ENVIAR MENSAJE
   if (req.method === "POST") {
     try {
-      const { to, message } = req.body;
+      const { to, nombre, hora, fecha } = req.body;
 
-      if (!to || !message) {
+      if (!to || !nombre || !hora || !fecha) {
         return res.status(400).json({
-          error: { message: "Faltan campos: to, message" }
+          error: { message: "Faltan campos: to, nombre, hora, fecha" }
         });
       }
 
+      // Formato Perú
       let phone = to.replace(/\D/g, "");
       if (phone.length === 9) phone = "51" + phone;
 
@@ -36,8 +37,23 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           to: phone,
-          type: "text",
-          text: message
+          type: "template",
+          template: {
+            name: "entrada_academia", // 👈 plantilla
+            language: {
+              code: "es"
+            },
+            components: [
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: nombre },
+                  { type: "text", text: hora },
+                  { type: "text", text: fecha }
+                ]
+              }
+            ]
+          }
         })
       });
 
