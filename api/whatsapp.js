@@ -31,7 +31,15 @@ export default async function handler(req, res) {
 
       console.log("📤 Enviando a:", phone);
 
-      // ✅ ENDPOINT CORRECTO
+      // 🔥 DEBUG IMPORTANTE (AQUÍ ESTÁ LA CLAVE)
+      console.log("🔑 API KEY:", ZERNIO_API_KEY);
+
+      if (!ZERNIO_API_KEY) {
+        return res.status(500).json({
+          error: { message: "API KEY no configurada en Vercel" }
+        });
+      }
+
       const response = await fetch("https://api.zernio.com/v1/whatsapp/messages", {
         method: "POST",
         headers: {
@@ -61,7 +69,7 @@ export default async function handler(req, res) {
         })
       });
 
-      // 🔥 Leer respuesta real
+      // 🔥 RESPUESTA REAL
       const text = await response.text();
       console.log("🧾 ZERNIO RAW:", text);
 
@@ -72,6 +80,7 @@ export default async function handler(req, res) {
         return res.status(500).json({
           error: {
             message: "Zernio no devolvió JSON",
+            tip: "Probablemente API KEY inválida o acceso denegado",
             raw: text
           }
         });
@@ -82,12 +91,12 @@ export default async function handler(req, res) {
       if (response.ok) {
         return res.status(200).json({
           success: true,
-          messages: data.messages || [{ id: "ok" }]
+          data
         });
       } else {
         return res.status(400).json({
           success: false,
-          error: data.error || data
+          error: data
         });
       }
 
