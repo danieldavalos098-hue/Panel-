@@ -1,86 +1,48 @@
-const ZERNIO_API_KEY = process.env.ZERNIO_API_KEY;
-
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: { message: "Metodo no permitido" }
-    });
+    return res.status(405).json({ error: "Método no permitido" });
   }
 
   try {
-    const { to } = req.body;
+    const { to, mensaje } = req.body;
 
-    if (!to) {
-      return res.status(400).json({
-        error: { message: "Falta el campo: to" }
-      });
+    if (!to || !mensaje) {
+      return res.status(400).json({ error: "Faltan datos" });
     }
 
-    // 📱 Formato Perú
-    let phone = to.replace(/\D/g, "");
-    if (phone.length === 9) phone = "51" + phone;
+    const token = process.env.WHATSAPP_TOKEN;
 
-    console.log("📤 Enviando a:", phone);
+    const phoneNumberId = "1063289196858980"; // 👈 tu ID de Meta (de la captura)
 
-    // 🔥 NUEVA PRUEBA (endpoint + formato tipo WhatsApp Cloud)
-    const response = await fetch("https://api.zernio.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${ZERNIO_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: phone,
-        type: "text",
-        text: {
-          body: "Hola prueba real 🚀"
-        }
-      })
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: to,
+          type: "text",
+          text: {
+            body: mensaje,
+          },
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    return res.status(200).json({
+      ok: true,
+      data,
     });
-
-    // 🔥 LEER RESPUESTA REAL
-    const text = await response.text();
-    console.log("🧾 ZERNIO RAW:", text);
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.status(500).json({
-        error: {
-          message: "Zernio devolvió HTML → endpoint incorrecto",
-          raw: text
-        }
-      });
-    }
-
-    console.log("✅ ZERNIO PARSED:", data);
-
-    if (response.ok) {
-      return res.status(200).json({
-        success: true,
-        data
-      });
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: data
-      });
-    }
-
   } catch (error) {
-    console.error("❌ ERROR:", error);
     return res.status(500).json({
-      error: { message: error.message }
+      error: "Error enviando mensaje",
+      detalle: error.message,
     });
   }
 }
