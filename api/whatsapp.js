@@ -25,9 +25,11 @@ export default async function handler(req, res) {
         });
       }
 
-      // Formato Perú
+      // 📱 Formato Perú (IMPORTANTE)
       let phone = to.replace(/\D/g, "");
       if (phone.length === 9) phone = "51" + phone;
+
+      console.log("📤 Enviando a:", phone);
 
       const response = await fetch("https://api.zernio.com/v1/messages/send", {
         method: "POST",
@@ -36,10 +38,11 @@ export default async function handler(req, res) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          messaging_product: "whatsapp", // 🔥 IMPORTANTE
           to: phone,
           type: "template",
           template: {
-            name: "entrada_academia", // 👈 plantilla
+            name: "entrada_academia",
             language: {
               code: "es"
             },
@@ -57,9 +60,23 @@ export default async function handler(req, res) {
         })
       });
 
-      const data = await response.json();
+      // 🔥 LEEMOS RESPUESTA REAL (clave)
+      const text = await response.text();
+      console.log("🧾 ZERNIO RAW:", text);
 
-      console.log("ZERNIO:", data);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        return res.status(500).json({
+          error: {
+            message: "Respuesta no es JSON (probable error de API)",
+            raw: text
+          }
+        });
+      }
+
+      console.log("✅ ZERNIO PARSED:", data);
 
       if (response.ok) {
         return res.status(200).json({
@@ -67,11 +84,15 @@ export default async function handler(req, res) {
         });
       } else {
         return res.status(200).json({
-          error: { message: data.message || "Error Zernio" }
+          error: {
+            message: data.message || data.error || "Error Zernio",
+            full: data
+          }
         });
       }
 
     } catch (e) {
+      console.error("❌ ERROR SERVER:", e);
       return res.status(500).json({
         error: { message: e.message }
       });
