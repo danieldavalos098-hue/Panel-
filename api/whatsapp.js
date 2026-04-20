@@ -16,11 +16,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { to, nombre, hora, fecha } = req.body;
+    const { to } = req.body;
 
-    if (!to || !nombre || !hora || !fecha) {
+    if (!to) {
       return res.status(400).json({
-        error: { message: "Faltan campos" }
+        error: { message: "Falta el campo: to" }
       });
     }
 
@@ -30,32 +30,24 @@ export default async function handler(req, res) {
 
     console.log("📤 Enviando a:", phone);
 
-    const response = await fetch("https://api.zernio.com/v1/messages/send", {
+    // 🔥 NUEVA PRUEBA (endpoint + formato tipo WhatsApp Cloud)
+    const response = await fetch("https://api.zernio.com/v1/messages", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${ZERNIO_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        messaging_product: "whatsapp",
         to: phone,
-        type: "template",
-        template: {
-          name: "entrada_academia",
-          language: { code: "es" },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: nombre },
-                { type: "text", text: hora },
-                { type: "text", text: fecha }
-              ]
-            }
-          ]
+        type: "text",
+        text: {
+          body: "Hola prueba real 🚀"
         }
       })
     });
 
+    // 🔥 LEER RESPUESTA REAL
     const text = await response.text();
     console.log("🧾 ZERNIO RAW:", text);
 
@@ -65,7 +57,7 @@ export default async function handler(req, res) {
     } catch {
       return res.status(500).json({
         error: {
-          message: "Zernio devolvió HTML (endpoint incorrecto o API key mal)",
+          message: "Zernio devolvió HTML → endpoint incorrecto",
           raw: text
         }
       });
